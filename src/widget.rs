@@ -1,23 +1,23 @@
-use crossterm::{execute, style::{*, self}, queue};
+use crossterm::style::{self, Stylize};
 
-use std::{default::default, sync::RwLock, time::Instant, io::stdout};
+use std::{sync::RwLock, time};
 
 pub enum Widget {
     Text {
-        message: &'static str
+        message: &'static str,
     },
     Percentage {
         message: &'static str,
-        progress: RwLock<f32>
+        progress: RwLock<f32>,
     },
     Progress {
         message: &'static str,
         progress: RwLock<usize>,
-        total: usize
+        total: usize,
     },
     Error {
         message: &'static str,
-    }
+    },
 }
 
 impl Widget {
@@ -25,24 +25,24 @@ impl Widget {
     pub fn new_text(message: &'static str) -> Self {
         Self::Text { message }
     }
-    
+
     /// Create a new progress widget
     pub fn new_progress(message: &'static str) -> Self {
         Self::Percentage {
             message,
-            progress: RwLock::new(0.0)
+            progress: RwLock::new(0.0),
         }
     }
-    
+
     /// Create a new discrete progress widget
     pub fn new_discrete_progress(message: &'static str, total: usize) -> Self {
         Self::Progress {
             message,
             progress: RwLock::new(0),
-            total
+            total,
         }
     }
-    
+
     /// Create a new error widget
     pub fn new_error(message: &'static str) -> Self {
         Self::Error { message }
@@ -61,45 +61,70 @@ impl Widget {
             *p.write().unwrap() = progress;
         }
     }
-    
+
     /// Render the widget
-    pub fn render(&self, time: Instant) {
+    pub fn render(&self, time: time::SystemTime) {
         use Widget::*;
 
         const SPINNER: &'static str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
         // change the first  half to change the "per second" spinner
-        let factor = 5.0 / 1000.0;
-        let mut spinner_char = SPINNER.chars().nth((time.elapsed().as_millis() as f32 * factor) as usize % SPINNER.len()).unwrap();
-        
+        let factor = 1000 / 5;
+        let charn = time
+            .duration_since(time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_millis()
+            / factor;
+        let mut spinner_char = SPINNER
+            .chars()
+            .nth(charn as usize % SPINNER.len())
+            .unwrap()
+            .to_string()
+            .blue();
+
         match self {
             // Lorem ipsum
             Text { message } => {
                 println!("{message}")
-            },
-            // [⠦] ━━━━━━━━[ 55.0%]         Lorem ipsum
+            }
+            // [⠦] [━━━━━━━━[ 55.0%]        ] Lorem ipsum
             Percentage { message, progress } => {
                 let progress = *progress.read().unwrap();
                 if progress >= 1.0 {
-                    spinner_char = '✓';
+                    spinner_char = "✓".to_string().green();
                 }
-                println!("[{spinner_char}] {center} {message}", center = percentage(progress, 25, format!("[{:3.1}%]", progress * 100.0)))
-            },
-            // [⠦] ━━━━━╸  [ 5/20]          Lorem ipsum
-            Progress { message, progress, total } => {
+                println!(
+                    "[{spinner_char}] [{center}] {message}",
+                    center = percentage(progress, 25, format!("[{:3.1}%]", progress * 100.0))
+                )
+            }
+            // [⠦] [━━━━━╸  [ 5/20]         ] Lorem ipsum
+            Progress {
+                message,
+                progress,
+                total,
+            } => {
                 let progress = *progress.read().unwrap();
                 if progress >= *total {
-                    spinner_char = '✓';
+                    spinner_char = "✓".to_string().green();
                 }
                 let digits = (*total as f32).log10().ceil() as usize;
                 let percent_progress = progress as f32 / *total as f32;
-                println!("[{spinner_char}] {center} {message}", center = percentage(percent_progress, 25, format!("[{progress:digits$}/{total}]")))
-            },
+                println!(
+                    "[{spinner_char}] [{center}] {message}",
+                    center = percentage(
+                        percent_progress,
+                        25,
+                        format!("[{progress:digits$}/{total}]")
+                    )
+                )
+            }
             // [⚠️] Uh-oh someone did an oopsie
-            Error { message } => todo!(),
+            Error { message } => {
+                println!("{}", format!("[⚠️] {message}").red())
+            }
         }
     }
 }
-
 
 fn percentage(progress: f32, width: usize, center_msg: String) -> String {
     let center_width = center_msg.len();
@@ -107,20 +132,24 @@ fn percentage(progress: f32, width: usize, center_msg: String) -> String {
     // the chunks of the progress bar that are filled
     let chunks = (progress * width as f32 * 2.0).floor() as usize;
     let tick = chunks % 2 == 1;
-    let chunks = chunks / 2 ;
-    
+    let chunks = chunks / 2;
+
     let mut left = "━".repeat(left_width);
     let mut right = "".to_string();
-    
+
     // if the progress is less than the left side of the center message
-    if chunks >= 0 && chunks < left_width {
+    if chunks < left_width {
         left = "━".repeat(chunks);
-        if tick { left.push('╸'); }
-    } 
+        if tick {
+            left.push('╸');
+        }
+    }
     // if the progress is greater than the right side of the center message
     else if chunks >= left_width + center_width {
         right = "━".repeat(chunks - left_width - center_width);
-        if tick { right.push('╸'); }
+        if tick {
+            right.push('╸');
+        }
     }
 
     let uncolored = format!(
@@ -129,5 +158,5 @@ fn percentage(progress: f32, width: usize, center_msg: String) -> String {
     );
     let left = uncolored.chars().take(chunks + 1).collect::<String>();
     let right = uncolored.chars().skip(chunks + 1).collect::<String>();
-    format!("{}{}{}", left.green(), style::ResetColor, right)
+    format!("{}{}", left.green(), right)
 }
