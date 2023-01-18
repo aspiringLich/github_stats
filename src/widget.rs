@@ -3,18 +3,27 @@ use crossterm::style::{self, Stylize};
 use std::{sync::RwLock, time};
 
 pub enum Widget {
+    // {message}
     Text {
         message: &'static str,
     },
+    // [⠦] [━━━━━━━━[ 55.0%]        ] {message}
     Percentage {
         message: &'static str,
         progress: RwLock<f32>,
     },
+    // [⠦] [━━━━━╸  [ 5/20]         ] {message}
     Progress {
         message: &'static str,
         progress: RwLock<usize>,
         total: usize,
     },
+    // [⠦] {message}
+    Task {
+        message: &'static str,
+        done: RwLock<bool>,
+    },
+    // [⚠️] {message}
     Error {
         message: &'static str,
     },
@@ -61,6 +70,13 @@ impl Widget {
             *p.write().unwrap() = progress;
         }
     }
+    
+    /// Update whether a task is done
+    pub fn update_task_done(&self, done: bool) {
+        if let Self::Task { done: d, .. } = self {
+            *d.write().unwrap() = done;
+        }
+    }
 
     /// Render the widget
     pub fn render(&self, time: time::SystemTime) {
@@ -74,12 +90,17 @@ impl Widget {
             .unwrap()
             .subsec_millis()
             / factor;
-        let mut spinner_char = SPINNER
+        let get_spinner_char = |cond| {
+            if cond {
+            "✓".to_string().green()
+        } else {
+            SPINNER
             .chars()
             .nth(charn as usize % SPINNER.len())
             .unwrap()
             .to_string()
-            .blue();
+            .blue()
+        }};
 
         match self {
             // Lorem ipsum
@@ -89,9 +110,7 @@ impl Widget {
             // [⠦] [━━━━━━━━[ 55.0%]        ] Lorem ipsum
             Percentage { message, progress } => {
                 let progress = *progress.read().unwrap();
-                if progress >= 1.0 {
-                    spinner_char = "✓".to_string().green();
-                }
+                let spinner_char = get_spinner_char(progress >= 1.0);
                 println!(
                     "[{spinner_char}] [{center}] {message}",
                     center = percentage(progress, 25, format!("[{:3.1}%]", progress * 100.0))
@@ -104,9 +123,7 @@ impl Widget {
                 total,
             } => {
                 let progress = *progress.read().unwrap();
-                if progress >= *total {
-                    spinner_char = "✓".to_string().green();
-                }
+                let spinner_char = get_spinner_char(progress > *total);
                 let digits = (*total as f32).log10().ceil() as usize;
                 let percent_progress = progress as f32 / *total as f32;
                 println!(
@@ -117,6 +134,14 @@ impl Widget {
                         format!("[{progress:digits$}/{total}]")
                     )
                 )
+            }
+            Task {
+                message,
+                done,
+            } => {
+                let done = *done.read().unwrap();
+                let spinner_char = get_spinner_char(done);
+                println!("[{spinner_char}] {message}")
             }
             // [⚠️] Uh-oh someone did an oopsie
             Error { message } => {
