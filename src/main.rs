@@ -10,10 +10,17 @@ mod widget;
 mod app;
 
 fn main() {
-    for i in 0..=50 {
-        let mut progress = Widget::new_progress("Testing testing");
-        progress.update_progress(0.02 * i as f32);
-        progress.render(time::SystemTime::now());
+    let mut root = Widget::new_task("Testing");
+    
+    for i in 0..10 {
+        let mut widget = Widget::new_task(format!("Task {}", i));
+        widget.set_done();
+        root = root.add_child(widget);
     }
-    Widget::new_error("aaa").render(time::SystemTime::now());
+
+    let mut app = app::App::new();
+    app.add_widget(root);
+    app.render();
+    app.render();
+    loop {}
 }

@@ -1,4 +1,4 @@
-use crossterm::style::{self, Stylize};
+use crossterm::style::{self, Stylize, StyledContent};
 
 use std::{default::default, sync::RwLock, time};
 
@@ -8,27 +8,27 @@ pub enum WidgetType {
     None,
     // {message}
     Text {
-        message: &'static str,
+        message: String,
     },
     // [⠦] [━━━━━━━━[ 55.0%]        ] {message}
     Percentage {
-        message: &'static str,
+        message: String,
         progress: f32,
     },
     // [⠦] [━━━━━╸  [ 5/20]         ] {message}
     Progress {
-        message: &'static str,
+        message: String,
         progress: usize,
         total: usize,
     },
     // [⠦] {message}
     Task {
-        message: &'static str,
+        message: String,
         done: bool,
     },
     // [⚠️] {message}
     Error {
-        message: &'static str,
+        message: String,
     },
 }
 
@@ -49,18 +49,18 @@ impl Widget {
     }
 
     /// Create a new text widget
-    pub fn new_text(message: &'static str) -> Self {
+    pub fn new_text<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Text { message },
+            widget: WidgetType::Text { message: message.into() },
             ..default()
         }
     }
 
     /// Create a new progress widget
-    pub fn new_progress(message: &'static str) -> Self {
+    pub fn new_progress<T: Into<String>>(message: T) -> Self {
         Self {
             widget: WidgetType::Percentage {
-                message,
+                message: message.into(),
                 progress: 0.0,
             },
             ..default()
@@ -68,59 +68,84 @@ impl Widget {
     }
 
     /// Create a new discrete progress widget
-    pub fn new_discrete_progress(message: &'static str, total: usize) -> Self {
+    pub fn new_discrete_progress<T: Into<String>>(message: T, total: usize) -> Self {
         Self {
             widget: WidgetType::Progress {
-                message,
+                message: message.into(),
                 progress: 0,
                 total,
             },
             ..default()
         }
     }
+    
+    /// Create a new task widget
+    pub fn new_task<T: Into<String>>(message: T) -> Self {
+        Self {
+            widget: WidgetType::Task {
+                message: message.into(),
+                done: false,
+            },
+            ..default()
+        }
+    }
 
     /// Create a new error widget
-    pub fn new_error(message: &'static str) -> Self {
+    pub fn new_error<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Error { message },
+            widget: WidgetType::Error { message: message.into() },
             ..default()
         }
     }
 
     /// Update the progress of a progress widget
     pub fn update_progress(&mut self, progress: f32) {
-        if let WidgetType::Percentage { progress: ref mut p, .. } = self.widget {
+        if let WidgetType::Percentage {
+            progress: ref mut p,
+            ..
+        } = self.widget
+        {
+            self.active = true;
             *p = progress;
         }
     }
 
     /// Update the progress of a discrete progress widget
     pub fn update_discrete_progress(&mut self, progress: usize) {
-        if let WidgetType::Progress { progress: ref mut p, .. } = self.widget {
+        if let WidgetType::Progress {
+            progress: ref mut p,
+            ..
+        } = self.widget
+        {
+            self.active = true;
             *p = progress;
         }
     }
 
     /// Update whether a task is done
     pub fn update_task_done(&mut self, done: bool) {
-        if let WidgetType::Task { done: ref mut d, .. } = self.widget {
+        if let WidgetType::Task {
+            done: ref mut d, ..
+        } = self.widget
+        {
+            self.active = true;
             *d = done;
         }
     }
 
     /// adds a child to this widget tree
-    pub fn add_child(mut self, widget: WidgetType) -> Self {
-        self.children.push(RwLock::new(Widget::new(widget)));
+    pub fn add_child(mut self, widget: Widget) -> Self {
+        self.children.push(RwLock::new(widget));
         self
     }
 
     /// adds children to this widget tree
-    pub fn add_children(mut self, children: &[WidgetType]) -> Self {
+    pub fn add_children(mut self, children: impl Iterator<Item = Widget>) -> Self {
         self.children
-            .extend(children.iter().map(|w| RwLock::new(Widget::new(w.clone()))));
+            .extend(children.map(|w| RwLock::new(w)));
         self
     }
-    
+
     /// detects if this widget is done
     pub fn is_done(&self) -> bool {
         use WidgetType::*;
@@ -128,20 +153,43 @@ impl Widget {
             None => true,
             Text { .. } => true,
             Percentage { progress, .. } => progress >= 1.0,
-            Progress { progress, total, .. } => progress >= total,
+            Progress {
+                progress, total, ..
+            } => progress >= total,
             Task { done, .. } => done,
             Error { .. } => true,
         }
     }
     
+    /// detects if this widget is active
+    /// widgets that dont track progress are automatically active
+    pub fn is_active(&self) -> bool {
+        use WidgetType::*;
+        match self.widget {
+            None => true,
+            Text { .. } => true,
+            Percentage { .. } => self.active,
+            Progress { .. } => self.active,
+            Task { .. } => self.active,
+            Error { .. } => true,
+        }
+    }
+
     /// sets the widget such that it is done
     pub fn set_done(&mut self) {
         use WidgetType::*;
+        self.active = true;
         match self.widget {
             None => {}
             Text { .. } => {}
-            Percentage { ref mut progress, .. } => *progress = 1.0,
-            Progress { ref mut progress, total, .. } => *progress = total,
+            Percentage {
+                ref mut progress, ..
+            } => *progress = 1.0,
+            Progress {
+                ref mut progress,
+                total,
+                ..
+            } => *progress = total,
             Task { ref mut done, .. } => *done = true,
             Error { .. } => {}
         }
@@ -151,7 +199,7 @@ impl Widget {
     pub fn render(&self, time: time::SystemTime) {
         use WidgetType::*;
 
-        const SPINNER: &'static str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
+        const SPINNER: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
         // change the first  half to change the "per second" spinner
         let factor = 1000 / 5;
         let charn = time
@@ -160,19 +208,23 @@ impl Widget {
             .subsec_millis()
             / factor;
         let get_spinner_char = |cond| {
-            if cond {
-                "✓".to_string().green()
+            if self.active {
+                if cond {
+                    "✓".to_string().green()
+                } else {
+                    SPINNER
+                        .chars()
+                        .nth(charn as usize % SPINNER.len())
+                        .unwrap()
+                        .to_string()
+                        .blue()
+                }
             } else {
-                SPINNER
-                    .chars()
-                    .nth(charn as usize % SPINNER.len())
-                    .unwrap()
-                    .to_string()
-                    .blue()
+                " ".to_string().white()
             }
         };
 
-        match self.widget {
+        match &self.widget {
             None => println!(),
             // Lorem ipsum
             Text { message } => {
@@ -180,10 +232,10 @@ impl Widget {
             }
             // [⠦] [━━━━━━━━[ 55.0%]        ] Lorem ipsum
             Percentage { message, progress } => {
-                let spinner_char = get_spinner_char(progress >= 1.0);
+                let spinner_char = get_spinner_char(*progress >= 1.0);
                 println!(
                     "[{spinner_char}] [{center}] {message}",
-                    center = percentage(progress, 25, format!("[{:3.1}%]", progress * 100.0))
+                    center = percentage(*progress, 25, format!("[{:3.1}%]", *progress * 100.0))
                 )
             }
             // [⠦] [━━━━━╸  [ 5/20]         ] Lorem ipsum
@@ -192,9 +244,9 @@ impl Widget {
                 progress,
                 total,
             } => {
-                let spinner_char = get_spinner_char(progress > total);
-                let digits = (total as f32).log10().ceil() as usize;
-                let percent_progress = progress as f32 / total as f32;
+                let spinner_char = get_spinner_char(*progress > *total);
+                let digits = (*total as f32).log10().ceil() as usize;
+                let percent_progress = *progress as f32 / *total as f32;
                 println!(
                     "[{spinner_char}] [{center}] {message}",
                     center = percentage(
@@ -205,7 +257,7 @@ impl Widget {
                 )
             }
             Task { message, done } => {
-                let spinner_char = get_spinner_char(done);
+                let spinner_char = get_spinner_char(*done);
                 println!("[{spinner_char}] {message}")
             }
             // [⚠️] Uh-oh someone did an oopsie
