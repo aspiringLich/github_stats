@@ -1,5 +1,5 @@
 [package]
-name = "github_stats"
+name = "progress_view"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,10 +7,5 @@ edition = "2021"
 
 [dependencies]
 crossterm = "0.25.0"
-reqwest = { version = "0.11" }
+futures = "0.3.25"
 tokio = {version = "1.24.2", features = ["time", "macros", "rt-multi-thread"]}
-
-progress_view = { path = "progress_view" }
-
-[workspace]
-members = ["progress_view"]

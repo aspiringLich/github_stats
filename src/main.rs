@@ -1,22 +1,16 @@
-#![feature(default_free_fn)]
-#![feature(exclusive_range_pattern)]
 #![feature(async_closure)]
-#![feature(trait_alias)]
+
+use std::{sync::Mutex, io::stdout, time::Duration};
+
+use crossterm::queue;
+use progress_view::{app::App, widget::Widget};
+use tokio::time::sleep;
+
+
 
 extern crate tokio;
 
-use std::{io::stdout, sync::Mutex, time::Duration};
 
-use app::App;
-use crossterm::queue;
-// use executor::Executor;
-use tokio::time::sleep;
-use widget::Widget;
-
-mod app;
-mod repo;
-mod task;
-mod widget;
 
 #[tokio::main]
 async fn main() {

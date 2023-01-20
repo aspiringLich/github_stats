@@ -227,7 +227,7 @@ name = "github_stats"
 version = "0.1.0"
 dependencies = [
  "crossterm",
- "futures",
+ "progress_view",
  "reqwest",
  "tokio",
 ]
@@ -575,6 +575,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ef7d57beacfaf2d8aee5937dab7b7f28de3cb8b1828479bb5de2a7106f2bae2"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "progress_view"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "futures",
+ "tokio",
 ]
 
 [[package]]
