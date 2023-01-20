@@ -4,7 +4,6 @@
 
 // use crate::widget::Widget;
 
-
 // pub struct WidgetTask<F, T>
 // where
 //     F: WidgetTaskFn<T>,
@@ -19,7 +18,7 @@
 //     pub fn new(f: F, widget: Arc<Mutex<Widget>>, out: Arc<Mutex<T>>) -> Self {
 //         Self { f, widget, out }
 //     }
-    
+
 //     pub async fn run(self) {
 //         let future = (self.f)(self.widget, self.out);
 //         future.await

@@ -5,32 +5,50 @@
 
 extern crate tokio;
 
-use std::{default::default, sync::{RwLock, Mutex, Arc}, time::Duration, thread, borrow::BorrowMut};
+use std::{
+    borrow::BorrowMut,
+    default::default,
+    sync::{Arc, Mutex, RwLock},
+    thread,
+    time::Duration,
+};
 
 use app::App;
 // use executor::Executor;
-use tokio::time::Interval;
-use widget::Widget;
+use tokio::time::{sleep, Interval};
+use widget::{Widget, WidgetType};
 
 mod app;
-mod widget;
 mod repo;
 mod task;
+mod widget;
 
 #[tokio::main]
 async fn main() {
-    let root = Widget::new_task("Testing");
-    
-    let app = Arc::new(Mutex::new(App::new()));
-    app.lock().unwrap().add_widget(root);
-    
+    let app = Mutex::new(App::new());
+    let output = Mutex::new(0);
+
+    {
+        let mut app = app.lock().unwrap();
+        let widget = app.add_widget(Widget::new_task("Testing"));
+
+        app.add_task(
+            async move |w| {
+                sleep(Duration::from_secs(2)).await;
+                let mut w = w.lock().unwrap();
+                w.set_message("eieio");
+                return 1;
+            },
+            widget,
+            output,
+        );
+    }
+
     render_app(app).await;
 }
 
-pub async fn render_app(app: Arc<Mutex<App>>) {
+pub async fn render_app(app: Mutex<App>) {
     let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 30.0));
-
-    dbg!("eee");
     while !app.lock().unwrap().render() {
         interval.tick().await;
     }

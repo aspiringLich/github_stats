@@ -15,29 +15,31 @@ pub struct App {
     pub runtime: Runtime,
 }
 
-trait WidgetTaskFn<T> =
-    FnOnce(Arc<Mutex<Widget>>, Arc<Mutex<T>>) -> Pin<Box<dyn Future<Output = ()> + Send>> + Send;
-
-
 impl App {
     pub fn new() -> Self {
-        Self { widgets: vec![], runtime: Runtime::new().unwrap() }
+        Self {
+            widgets: vec![],
+            runtime: Runtime::new().unwrap(),
+        }
     }
-    
+
     /// adds a new task to the runtime
-    pub fn add_task<F, T>(&mut self, f: F, widget: Arc<Mutex<Widget>>, out: Arc<Mutex<T>>)
+    pub fn add_task<E, F, T>(&mut self, f: E, widget: Arc<Mutex<Widget>>, out: Mutex<T>)
     where
-        F: WidgetTaskFn<T>,
-        T: Send + Sync + 'static,
+        E: FnOnce(Arc<Mutex<Widget>>) -> F + Send + 'static,
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static + Sized,
     {
         self.runtime.spawn(async move {
-            f(widget, out).await
+            let ret = f(widget).await;
+            *out.lock().unwrap() = ret;
         });
     }
 
     /// adds a widget to the app
-    pub fn add_widget(&mut self, widget: Widget) {
+    pub fn add_widget(&mut self, widget: Widget) -> Arc<Mutex<Widget>> {
         self.widgets.push(Arc::new(Mutex::new(widget)));
+        self.widgets.last().unwrap().clone()
     }
 
     /// does a recursive depth first search through the widget tree
@@ -49,7 +51,7 @@ impl App {
         let mut out = true;
         for widget in self.widgets.iter() {
             let (done, _) = Self::_render_inner(widget, time, 0, &mut lines);
-            
+
             if !done {
                 out = false;
             }

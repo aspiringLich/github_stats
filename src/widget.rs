@@ -1,35 +1,31 @@
-use crossterm::style::{self, Stylize, StyledContent};
+use crossterm::style::{self, StyledContent, Stylize};
 
-use std::{default::default, sync::{RwLock, Arc, Mutex}, time};
+use std::{
+    default::{self, default},
+    sync::{Arc, Mutex, RwLock},
+    time,
+};
 
 #[derive(Clone, Debug, Default)]
 pub enum WidgetType {
-    #[default]
-    None,
     // {message}
-    Text {
-        message: String,
-    },
+    #[default]
+    Text,
     // [⠦] [━━━━━━━━[ 55.0%]        ] {message}
     Percentage {
-        message: String,
         progress: f32,
     },
     // [⠦] [━━━━━╸  [ 5/20]         ] {message}
     Progress {
-        message: String,
         progress: usize,
         total: usize,
     },
     // [⠦] {message}
     Task {
-        message: String,
         done: bool,
     },
     // [⚠️] {message}
-    Error {
-        message: String,
-    },
+    Error,
 }
 
 #[derive(Default)]
@@ -37,21 +33,15 @@ pub struct Widget {
     pub widget: WidgetType,
     pub children: Vec<Arc<Mutex<Widget>>>,
     pub active: bool,
+    pub message: String,
 }
 
 impl Widget {
-    /// creates a widget from a widget type
-    pub fn new(widget: WidgetType) -> Self {
-        Self {
-            widget,
-            ..default()
-        }
-    }
-
     /// Create a new text widget
     pub fn new_text<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Text { message: message.into() },
+            message: message.into(),
+            widget: WidgetType::Text,
             ..default()
         }
     }
@@ -59,10 +49,8 @@ impl Widget {
     /// Create a new progress widget
     pub fn new_progress<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Percentage {
-                message: message.into(),
-                progress: 0.0,
-            },
+            message: message.into(),
+            widget: WidgetType::Percentage { progress: 0.0 },
             ..default()
         }
     }
@@ -70,22 +58,17 @@ impl Widget {
     /// Create a new discrete progress widget
     pub fn new_discrete_progress<T: Into<String>>(message: T, total: usize) -> Self {
         Self {
-            widget: WidgetType::Progress {
-                message: message.into(),
-                progress: 0,
-                total,
-            },
+            message: message.into(),
+            widget: WidgetType::Progress { progress: 0, total },
             ..default()
         }
     }
-    
+
     /// Create a new task widget
     pub fn new_task<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Task {
-                message: message.into(),
-                done: false,
-            },
+            message: message.into(),
+            widget: WidgetType::Task { done: false },
             ..default()
         }
     }
@@ -93,7 +76,8 @@ impl Widget {
     /// Create a new error widget
     pub fn new_error<T: Into<String>>(message: T) -> Self {
         Self {
-            widget: WidgetType::Error { message: message.into() },
+            message: message.into(),
+            widget: WidgetType::Error,
             ..default()
         }
     }
@@ -150,7 +134,6 @@ impl Widget {
     pub fn is_done(&self) -> bool {
         use WidgetType::*;
         match self.widget {
-            None => true,
             Text { .. } => true,
             Percentage { progress, .. } => progress >= 1.0,
             Progress {
@@ -160,13 +143,12 @@ impl Widget {
             Error { .. } => true,
         }
     }
-    
+
     /// detects if this widget is active
     /// widgets that dont track progress are automatically active
     pub fn is_active(&self) -> bool {
         use WidgetType::*;
         match self.widget {
-            None => true,
             Text { .. } => true,
             Percentage { .. } => self.active,
             Progress { .. } => self.active,
@@ -180,7 +162,6 @@ impl Widget {
         use WidgetType::*;
         self.active = true;
         match self.widget {
-            None => {}
             Text { .. } => {}
             Percentage {
                 ref mut progress, ..
@@ -193,6 +174,11 @@ impl Widget {
             Task { ref mut done, .. } => *done = true,
             Error { .. } => {}
         }
+    }
+
+    /// sets the message of this widget
+    pub fn set_message<T: Into<String>>(&mut self, message: T) {
+        self.message = message.into();
     }
 
     /// Render the widget
@@ -224,14 +210,14 @@ impl Widget {
             }
         };
 
+        let message = &self.message;
         match &self.widget {
-            None => println!(),
             // Lorem ipsum
-            Text { message } => {
+            Text => {
                 println!("{message}")
             }
             // [⠦] [━━━━━━━━[ 55.0%]        ] Lorem ipsum
-            Percentage { message, progress } => {
+            Percentage { progress } => {
                 let spinner_char = get_spinner_char(*progress >= 1.0);
                 println!(
                     "[{spinner_char}] [{center}] {message}",
@@ -239,11 +225,7 @@ impl Widget {
                 )
             }
             // [⠦] [━━━━━╸  [ 5/20]         ] Lorem ipsum
-            Progress {
-                message,
-                progress,
-                total,
-            } => {
+            Progress { progress, total } => {
                 let spinner_char = get_spinner_char(*progress > *total);
                 let digits = (*total as f32).log10().ceil() as usize;
                 let percent_progress = *progress as f32 / *total as f32;
@@ -256,12 +238,12 @@ impl Widget {
                     )
                 )
             }
-            Task { message, done } => {
+            Task { done } => {
                 let spinner_char = get_spinner_char(*done);
                 println!("[{spinner_char}] {message}")
             }
             // [⚠️] Uh-oh someone did an oopsie
-            Error { message } => {
+            Error => {
                 println!("{}", format!("[⚠️] {message}").red())
             }
         }
