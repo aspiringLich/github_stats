@@ -1,6 +1,6 @@
 use crossterm::style::{self, Stylize, StyledContent};
 
-use std::{default::default, sync::RwLock, time};
+use std::{default::default, sync::{RwLock, Arc, Mutex}, time};
 
 #[derive(Clone, Debug, Default)]
 pub enum WidgetType {
@@ -35,7 +35,7 @@ pub enum WidgetType {
 #[derive(Default)]
 pub struct Widget {
     pub widget: WidgetType,
-    pub children: Vec<RwLock<Widget>>,
+    pub children: Vec<Arc<Mutex<Widget>>>,
     pub active: bool,
 }
 
@@ -135,14 +135,14 @@ impl Widget {
 
     /// adds a child to this widget tree
     pub fn add_child(mut self, widget: Widget) -> Self {
-        self.children.push(RwLock::new(widget));
+        self.children.push(Arc::new(Mutex::new(widget)));
         self
     }
 
     /// adds children to this widget tree
     pub fn add_children(mut self, children: impl Iterator<Item = Widget>) -> Self {
         self.children
-            .extend(children.map(|w| RwLock::new(w)));
+            .extend(children.map(|w| Arc::new(Mutex::new(w))));
         self
     }
 
