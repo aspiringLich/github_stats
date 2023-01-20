@@ -5,18 +5,13 @@
 
 extern crate tokio;
 
-use std::{
-    borrow::BorrowMut,
-    default::default,
-    sync::{Arc, Mutex, RwLock},
-    thread,
-    time::Duration,
-};
+use std::{io::stdout, sync::Mutex, time::Duration};
 
 use app::App;
+use crossterm::queue;
 // use executor::Executor;
-use tokio::time::{sleep, Interval};
-use widget::{Widget, WidgetType};
+use tokio::time::sleep;
+use widget::Widget;
 
 mod app;
 mod repo;
@@ -31,6 +26,7 @@ async fn main() {
     {
         let mut app = app.lock().unwrap();
         let widget = app.add_widget(Widget::new_task("Testing"));
+        app.add_widget(Widget::new_progress("this will never finish"));
 
         app.add_task(
             async move |w| {
@@ -48,8 +44,10 @@ async fn main() {
 }
 
 pub async fn render_app(app: Mutex<App>) {
-    let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 30.0));
+    queue!(stdout(), crossterm::cursor::Hide).expect("no io errors");
+    let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 60.0));
     while !app.lock().unwrap().render() {
         interval.tick().await;
     }
+    queue!(stdout(), crossterm::cursor::Show).expect("no io errors");
 }

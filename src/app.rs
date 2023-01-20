@@ -1,14 +1,14 @@
-use std::pin::Pin;
+use std::io::stdout;
 use std::sync::{Arc, Mutex};
 use std::time;
-use std::{io::stdout, sync::RwLock};
 
 use crossterm::cursor::MoveUp;
-use crossterm::execute;
+use crossterm::terminal::{Clear, ClearType};
+use crossterm::{execute, queue};
 use futures::Future;
 use tokio::runtime::Runtime;
 
-use crate::widget::{self, Widget, WidgetType};
+use crate::widget::Widget;
 
 pub struct App {
     pub widgets: Vec<Arc<Mutex<Widget>>>,
@@ -30,9 +30,12 @@ impl App {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static + Sized,
     {
+        // set active to true so i get the cool spinner thingy
+        widget.lock().unwrap().active = true;
         self.runtime.spawn(async move {
-            let ret = f(widget).await;
+            let ret = f(widget.clone()).await;
             *out.lock().unwrap() = ret;
+            widget.lock().unwrap().set_done();
         });
     }
 
@@ -69,6 +72,7 @@ impl App {
         let mut w = widget.lock().unwrap();
 
         // print out stuff for this widget
+        queue!(stdout(), Clear(ClearType::CurrentLine)).expect("no io err");
         w.render(time);
         *lines += 1;
 

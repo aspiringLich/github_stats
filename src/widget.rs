@@ -1,8 +1,8 @@
-use crossterm::style::{self, StyledContent, Stylize};
+use crossterm::style::Stylize;
 
 use std::{
-    default::{self, default},
-    sync::{Arc, Mutex, RwLock},
+    default::default,
+    sync::{Arc, Mutex},
     time,
 };
 
@@ -185,25 +185,15 @@ impl Widget {
     pub fn render(&self, time: time::SystemTime) {
         use WidgetType::*;
 
-        const SPINNER: &str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-        // change the first  half to change the "per second" spinner
-        let factor = 1000 / 5;
-        let charn = time
-            .duration_since(time::UNIX_EPOCH)
-            .unwrap()
-            .subsec_millis()
-            / factor;
+        const SPINNER: [char; 6] = ['⠋', '⠙', '⠸', '⣠', '⣄', '⡆'];
+        let charn = (time.duration_since(time::UNIX_EPOCH).unwrap().as_millis() / 100
+            % usize::MAX as u128) as usize;
         let get_spinner_char = |cond| {
             if self.active {
                 if cond {
                     "✓".to_string().green()
                 } else {
-                    SPINNER
-                        .chars()
-                        .nth(charn as usize % SPINNER.len())
-                        .unwrap()
-                        .to_string()
-                        .blue()
+                    SPINNER[charn % SPINNER.len()].to_string().white()
                 }
             } else {
                 " ".to_string().white()
