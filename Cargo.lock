@@ -227,6 +227,7 @@ name = "github_stats"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "futures",
  "progress_view",
  "reqwest",
  "tokio",

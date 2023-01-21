@@ -7,11 +7,12 @@ use std::{
 };
 
 use crossterm::queue;
+use futures::executor::block_on;
 use progress_view::{app::App, update::Update, widget::Widget};
 use tokio::time::sleep;
 
 #[tokio::main]
-async fn main() {
+async fn main() {    
     let app = Mutex::new(App::new());
     let output = Mutex::new(0);
 
@@ -32,13 +33,13 @@ async fn main() {
         );
     }
 
-    render_app(app).await;
+    let future = render_app(app);
+    block_on(future);
 }
 
 pub async fn render_app(app: Mutex<App>) {
     let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 60.0));
-    loop {
-        app.lock().unwrap().render().await;
+    while !app.lock().unwrap().render() {
         interval.tick().await;
     }
 }

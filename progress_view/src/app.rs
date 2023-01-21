@@ -7,7 +7,7 @@ use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{execute, queue};
 use futures::Future;
-use tokio::runtime::Runtime;
+use tokio::runtime::{Runtime, Handle};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
@@ -16,7 +16,6 @@ use crate::widget::Widget;
 
 pub struct App {
     pub widgets: Vec<Widget>,
-    pub runtime: Runtime,
     pub reciever: Receiver<update::WidgetUpdate>,
     pub sender: Sender<update::WidgetUpdate>,
 }
@@ -46,7 +45,6 @@ impl App {
 
         Self {
             widgets: vec![],
-            runtime: Runtime::new().unwrap(),
             reciever,
             sender,
         }
@@ -60,7 +58,7 @@ impl App {
         T: Send + 'static,
     {
         let sender = UpdateSender::new(self.sender.clone(), index);
-        self.runtime.spawn(async move {
+        Handle::current().spawn(async move {
             // set active to true so i get the cool spinner thingy
             sender.send(Update::SetActive).await;
             // run the actual task & pass it into output
@@ -83,7 +81,7 @@ impl App {
     /// to display them & sets the widget as done if all of its children are done
     ///
     /// returns whether everything is done
-    pub async fn render(&mut self) -> bool {
+    pub fn render(&mut self) -> bool {
         // handle all the updates
         while let Some(update) = self.reciever.try_recv().ok() {
             use Update::*;
