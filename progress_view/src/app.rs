@@ -7,7 +7,7 @@ use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{execute, queue};
 use futures::Future;
-use tokio::runtime::{Runtime, Handle};
+use tokio::runtime::{Handle, Runtime};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
 

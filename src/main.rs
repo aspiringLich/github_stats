@@ -1,18 +1,13 @@
 #![feature(async_closure)]
 
-use std::{
-    io::stdout,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Mutex, time::Duration};
 
-use crossterm::queue;
 use futures::executor::block_on;
 use progress_view::{app::App, update::Update, widget::Widget};
 use tokio::time::sleep;
 
 #[tokio::main]
-async fn main() {    
+async fn main() {
     let app = Mutex::new(App::new());
     let output = Mutex::new(0);
 

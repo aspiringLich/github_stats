@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct WidgetUpdate {
     pub update_type: Update,
