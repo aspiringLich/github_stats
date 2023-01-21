@@ -4,5 +4,5 @@
 #![feature(trait_alias)]
 
 pub mod app;
-pub mod widget;
 pub mod update;
+pub mod widget;

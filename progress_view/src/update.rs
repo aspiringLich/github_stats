@@ -1,7 +1,6 @@
-
 pub struct WidgetUpdate {
-    update_type: Update,
-    widget_index: usize,
+    pub update_type: Update,
+    pub index: usize,
 }
 
 pub enum Update {
@@ -10,12 +9,18 @@ pub enum Update {
     SetMessage(String),
 }
 
+impl Update {
+    pub fn set_message<T: Into<String>>(message: T) -> Self {
+        Self::SetMessage(message.into())
+    }
+}
+
 impl WidgetUpdate {
     /// Creates a new update
     pub fn new(update_type: Update, widget_index: usize) -> Self {
         Self {
             update_type,
-            widget_index,
+            index: widget_index,
         }
     }
 }

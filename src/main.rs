@@ -7,7 +7,7 @@ use std::{
 };
 
 use crossterm::queue;
-use progress_view::{app::App, widget::Widget, update::Update};
+use progress_view::{app::App, update::Update, widget::Widget};
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -23,8 +23,8 @@ async fn main() {
         app.add_task(
             async move |s| {
                 sleep(Duration::from_secs(2)).await;
-                s.send(Update::SetDone).await;
-                
+                s.send(Update::set_message("weewoo")).await;
+
                 return 2;
             },
             widget,
@@ -38,7 +38,7 @@ async fn main() {
 pub async fn render_app(app: Mutex<App>) {
     queue!(stdout(), crossterm::cursor::Hide).expect("no io errors");
     let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 60.0));
-    while !app.lock().unwrap().render() {
+    while !app.lock().unwrap().render() .await{
         interval.tick().await;
     }
     queue!(stdout(), crossterm::cursor::Show).expect("no io errors");

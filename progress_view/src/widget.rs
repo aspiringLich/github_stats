@@ -40,13 +40,13 @@ impl Widget {
     /// Creates a new text widget off of a WidgetType, message, and indent
     fn new<T: Into<String>>(message: T, indent: usize, widget: WidgetType) -> Self {
         Self {
-            message: message.into(), 
+            message: message.into(),
             indent,
             widget,
             ..default()
         }
     }
-    
+
     /// Create a new text widget
     pub fn new_text<T: Into<String>>(message: T, indent: usize) -> Self {
         Self::new(message, indent, WidgetType::Text)
@@ -54,7 +54,7 @@ impl Widget {
 
     /// Create a new progress widget
     pub fn new_progress<T: Into<String>>(message: T, indent: usize, total: usize) -> Self {
-        Self::new(message, indent, WidgetType::Progress { progress: 0, total})
+        Self::new(message, indent, WidgetType::Progress { progress: 0, total })
     }
 
     /// Create a new discrete progress widget
