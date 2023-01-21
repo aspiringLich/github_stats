@@ -36,10 +36,9 @@ async fn main() {
 }
 
 pub async fn render_app(app: Mutex<App>) {
-    queue!(stdout(), crossterm::cursor::Hide).expect("no io errors");
     let mut interval = tokio::time::interval(Duration::from_secs_f32(1.0 / 60.0));
-    while !app.lock().unwrap().render() .await{
+    loop {
+        app.lock().unwrap().render().await;
         interval.tick().await;
     }
-    queue!(stdout(), crossterm::cursor::Show).expect("no io errors");
 }

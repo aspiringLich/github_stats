@@ -1,8 +1,11 @@
+
+#[derive(Debug, Clone)]
 pub struct WidgetUpdate {
     pub update_type: Update,
     pub index: usize,
 }
 
+#[derive(Debug, Clone)]
 pub enum Update {
     SetActive,
     SetDone,

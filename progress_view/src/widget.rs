@@ -28,7 +28,7 @@ pub enum WidgetType {
     Error,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Widget {
     pub widget: WidgetType,
     pub active: bool,
@@ -151,6 +151,7 @@ impl Widget {
             Task { ref mut done, .. } => *done = true,
             Error { .. } => {}
         }
+        // dbg!(&self);
     }
 
     /// sets the message of this widget

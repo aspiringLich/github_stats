@@ -35,7 +35,8 @@ impl UpdateSender {
     pub async fn send(&self, update: Update) {
         self.sender
             .send(WidgetUpdate::new(update, self.index))
-            .await;
+            .await
+            .expect("channel is open");
     }
 }
 
@@ -87,7 +88,7 @@ impl App {
         while let Some(update) = self.reciever.try_recv().ok() {
             use Update::*;
             let widget = &mut self.widgets[update.index];
-            
+
             match update.update_type {
                 SetActive => {
                     widget.active = true;
@@ -99,15 +100,34 @@ impl App {
             }
         }
 
-        let time = time::SystemTime::now();
-
-        let out = self.render_inner(0, time).all_done;
-        execute!(stdout(), MoveUp(self.widgets.len() as u16)).expect("no io err");
+        // queue!(stdout(), crossterm::cursor::Hide).expect("no io err");
+        let out = self.update_widget_status(0).all_done;
+        self.render_widgets();
 
         out
     }
 
-    fn render_inner(&mut self, index: usize, time: time::SystemTime) -> RenderInner {
+    fn render_widgets(&self) {
+        let time = time::SystemTime::now();
+
+        for widget in &self.widgets {
+            // put the backing behind it
+            if widget.indent > 0 {
+                queue!(
+                    stdout(),
+                    Clear(ClearType::CurrentLine),
+                    Print(" ".repeat(widget.indent * 3 - 2) + "• ")
+                )
+                .expect("no io err")
+            }
+
+            widget.render(time);
+        }
+        queue!(stdout(), MoveUp(self.widgets.len() as u16),).expect("no io err");
+    }
+
+    fn update_widget_status(&mut self, mut index: usize) -> RenderInner {
+        let mut prev = index;
         let indent = self.widgets[index].indent;
 
         let mut out = RenderInner {
@@ -115,10 +135,22 @@ impl App {
             all_done: true,
             active: false,
         };
-        let mut iter = false;
+        let mut children = false;
 
-        for index in index..self.widgets.len() {
-            iter = true;
+        macro ret() {{
+            if children {
+                let widget = &mut self.widgets[prev];
+                if out.all_done {
+                    widget.set_done()
+                }
+                if out.active {
+                    widget.active = true;
+                }
+            }
+            out
+        }}
+
+        while index < self.widgets.len() {
             let widget = &self.widgets[index];
 
             use std::cmp::Ordering::*;
@@ -126,61 +158,48 @@ impl App {
                 // if less, we should return
                 Less => {
                     out.new_index = index;
-                    return out;
+                    return ret!();
                 }
                 // if equal, keep going
                 Equal => {
                     if !widget.is_done() {
                         out.all_done = false;
+                        // dbg!(&widget);
                     }
                     if widget.is_active() {
                         out.active = true;
                     }
-                    // put the backing behind it
-                    if indent > 0 {
-                        queue!(
-                            stdout(),
-                            Clear(ClearType::CurrentLine),
-                            Print(" ".repeat(indent * 3 - 2) + "• ")
-                        )
-                        .expect("no io err")
-                    }
-
-                    widget.render(time);
                 }
                 // greater, this is out of our hands
                 // we should call render_inner on this widget
                 Greater => {
-                    let inner = self.render_inner(index, time);
-                    if !inner.all_done {
+                    children = true;
+
+                    let ret = self.update_widget_status(index);
+                    // dbg!(&ret);
+
+                    if ret.all_done {
+                        self.widgets[prev].set_done();
+                    } else {
                         out.all_done = false;
                     }
-                    if inner.active {
+                    if ret.active {
+                        self.widgets[prev].active = true;
                         out.active = true;
                     }
-                    if self.widgets[inner.new_index].indent > indent && inner.new_index < self.widgets.len() - 1 {
-                        out.new_index = inner.new_index;
-                        return out;
-                    }
-                    out.new_index = inner.new_index;
+
+                    prev = index;
+                    index = ret.new_index;
                 }
             }
-        }
 
-        if iter {
-            let widget = &mut self.widgets[index];
-            if out.all_done {
-                widget.set_done()
-            }
-            if out.active {
-                widget.active = true;
-            }
+            index += 1;
         }
-
-        out
+        return ret!();
     }
 }
 
+#[derive(Debug)]
 struct RenderInner {
     new_index: usize,
     all_done: bool,

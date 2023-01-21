@@ -2,6 +2,7 @@
 #![feature(exclusive_range_pattern)]
 #![feature(async_closure)]
 #![feature(trait_alias)]
+#![feature(decl_macro)]
 
 pub mod app;
 pub mod update;
