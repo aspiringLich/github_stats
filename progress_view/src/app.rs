@@ -2,109 +2,155 @@ use std::io::stdout;
 use std::sync::{Arc, Mutex};
 use std::time;
 
-use crossterm::cursor::MoveUp;
+use crossterm::cursor::{MoveUp, SavePosition, RestorePosition};
+use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{execute, queue};
 use futures::Future;
 use tokio::runtime::Runtime;
 
+use tokio::sync::mpsc::{self, Receiver, Sender};
+
+use crate::update::{self, WidgetUpdate, Update};
 use crate::widget::Widget;
 
 pub struct App {
-    pub widgets: Vec<Arc<Mutex<Widget>>>,
+    pub widgets: Vec<Widget>,
     pub runtime: Runtime,
+    pub reciever: Receiver<update::WidgetUpdate>,
+    pub sender: Sender<update::WidgetUpdate>,
+}
+
+#[derive(Clone)]
+pub struct UpdateSender {
+    pub sender: Sender<update::WidgetUpdate>,
+    pub index: usize
+}
+
+impl UpdateSender {
+    pub fn new(sender: Sender<update::WidgetUpdate>, index: usize) -> Self {
+        Self {
+            sender,
+            index
+        }
+    }
+    
+    pub async fn send(&self, update: Update) {
+        self.sender.send(WidgetUpdate::new(update, self.index)).await;
+    }
 }
 
 impl App {
     pub fn new() -> Self {
+        let (sender, reciever) = mpsc::channel(64);
+        
         Self {
             widgets: vec![],
             runtime: Runtime::new().unwrap(),
+            reciever,
+            sender,
         }
     }
 
     /// adds a new task to the runtime
-    pub fn add_task<E, F, T>(&mut self, f: E, widget: Arc<Mutex<Widget>>, out: Mutex<T>)
+    pub fn add_task<E, F, T>(&mut self, f: E, index: usize, out: Mutex<T>)
     where
-        E: FnOnce(Arc<Mutex<Widget>>) -> F + Send + 'static,
+        E: FnOnce(UpdateSender) -> F + Send + 'static,
         F: Future<Output = T> + Send + 'static,
-        T: Send + 'static + Sized,
+        T: Send + 'static,
     {
-        // set active to true so i get the cool spinner thingy
-        widget.lock().unwrap().active = true;
+        let sender = UpdateSender::new(self.sender.clone(), index);
         self.runtime.spawn(async move {
-            let ret = f(widget.clone()).await;
+            // set active to true so i get the cool spinner thingy
+            sender.send(Update::SetActive).await;
+            // run the actual task & pass it into output
+            let ret = f(sender.clone()).await;
             *out.lock().unwrap() = ret;
-            widget.lock().unwrap().set_done();
+            // set done 
+            sender.send(Update::SetDone).await;
         });
     }
 
     /// adds a widget to the app
-    pub fn add_widget(&mut self, widget: Widget) -> Arc<Mutex<Widget>> {
-        self.widgets.push(Arc::new(Mutex::new(widget)));
-        self.widgets.last().unwrap().clone()
+    /// 
+    /// returns the index of the widget that you just added
+    pub fn add_widget(&mut self, widget: Widget) -> usize {
+        self.widgets.push(widget);
+        return self.widgets.len() - 1;
     }
 
     /// does a recursive depth first search through the widget tree
     /// to display them & sets the widget as done if all of its children are done
+    ///
+    /// returns whether everything is done
     pub fn render(&mut self) -> bool {
         let time = time::SystemTime::now();
-
-        let mut lines = 0;
-        let mut out = true;
-        for widget in self.widgets.iter() {
-            let (done, _) = Self::_render_inner(widget, time, 0, &mut lines);
-
-            if !done {
-                out = false;
-            }
-        }
-        execute!(stdout(), MoveUp(lines)).expect("no io errors");
+        
+        let out = Self::render_inner(0, &self.widgets, time).all_done;
+        execute!(stdout(), MoveUp(self.widgets.len() as u16)).expect("no io err");
+        
         out
     }
 
-    fn _render_inner(
-        widget: &Mutex<Widget>,
+    fn render_inner(
+        index: usize,
+        widgets: &Vec<Widget>,
         time: time::SystemTime,
-        depth: usize,
-        lines: &mut u16,
-    ) -> (bool, bool) {
-        let mut w = widget.lock().unwrap();
-
-        // print out stuff for this widget
-        queue!(stdout(), Clear(ClearType::CurrentLine)).expect("no io err");
-        w.render(time);
-        *lines += 1;
-
-        // do the actual search
-        let (mut done, mut active) = (false, false);
-        let len = w.children.len();
-        for (i, child) in w.children.iter().enumerate() {
-            // render the indentation before the child widgets render themselves
-            if i == 0 {
-                print!("{} └┬─", " ".repeat(depth * 4));
-            } else {
-                let ch = if i == len - 1 { '└' } else { '├' };
-                print!("{}{}─", " ".repeat(depth * 4 + 2), ch);
+    ) -> RenderInner {
+        let indent = widgets[index].indent;
+        
+        let mut out = RenderInner {
+            new_index: index,
+            all_done: true,
+            active: false,
+        };
+        
+        for index in index..widgets.len() {
+            let widget = &widgets[index];
+            
+            use std::cmp::Ordering::*;
+            match widget.indent.cmp(&indent) {
+                // if less, we should return
+                Less => {
+                    out.new_index = index;
+                    return out;
+                },
+                // if equal, keep going
+                Equal => {
+                    if !widget.is_done() {
+                        out.all_done = false;
+                    }
+                    if widget.is_active() {
+                        out.active = true;
+                    }
+                    // put the backing behind it
+                    if indent > 0 {
+                        queue!(stdout(), Clear(ClearType::CurrentLine), Print(" ".repeat(indent * 3 - 2) + "• ")).expect("no io err")
+                    }
+                    
+                    widget.render(time);
+                },
+                // greater, this is out of our hands
+                // we should call render_inner on this widget
+                Greater => {
+                    let inner = Self::render_inner(index, widgets, time);
+                    if !inner.all_done {
+                        out.all_done = false;
+                    }
+                    if inner.active {
+                        out.active = true;
+                    }
+                    out.new_index = inner.new_index;
+                },
             }
-
-            // if any are done or active, set done or active
-            let (_done, _active) = Self::_render_inner(child, time, depth + 1, lines);
-            if _done {
-                done = true
-            };
-            if _active {
-                active = true
-            };
         }
-        // set it done if all of its children are done
-        if done {
-            w.set_done();
-        }
-        // take a guess
-        if active {
-            w.active = true;
-        }
-        (w.is_done(), w.is_active())
+        
+        out
     }
+}
+
+struct RenderInner {
+    new_index: usize,
+    all_done: bool,
+    active: bool,
 }

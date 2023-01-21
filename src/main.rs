@@ -1,16 +1,14 @@
 #![feature(async_closure)]
 
-use std::{sync::Mutex, io::stdout, time::Duration};
+use std::{
+    io::stdout,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use crossterm::queue;
-use progress_view::{app::App, widget::Widget};
+use progress_view::{app::App, widget::Widget, update::Update};
 use tokio::time::sleep;
-
-
-
-extern crate tokio;
-
-
 
 #[tokio::main]
 async fn main() {
@@ -19,15 +17,15 @@ async fn main() {
 
     {
         let mut app = app.lock().unwrap();
-        let widget = app.add_widget(Widget::new_task("Testing"));
-        app.add_widget(Widget::new_progress("this will never finish"));
+        app.add_widget(Widget::new_task("Header", 0));
+        let widget = app.add_widget(Widget::new_task("Testing", 1));
 
         app.add_task(
-            async move |w| {
+            async move |s| {
                 sleep(Duration::from_secs(2)).await;
-                let mut w = w.lock().unwrap();
-                w.set_message("eieio");
-                return 1;
+                s.send(Update::SetDone).await;
+                
+                return 2;
             },
             widget,
             output,

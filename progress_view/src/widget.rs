@@ -31,55 +31,45 @@ pub enum WidgetType {
 #[derive(Default)]
 pub struct Widget {
     pub widget: WidgetType,
-    pub children: Vec<Arc<Mutex<Widget>>>,
     pub active: bool,
     pub message: String,
+    pub indent: usize,
 }
 
 impl Widget {
-    /// Create a new text widget
-    pub fn new_text<T: Into<String>>(message: T) -> Self {
+    /// Creates a new text widget off of a WidgetType, message, and indent
+    fn new<T: Into<String>>(message: T, indent: usize, widget: WidgetType) -> Self {
         Self {
-            message: message.into(),
-            widget: WidgetType::Text,
+            message: message.into(), 
+            indent,
+            widget,
             ..default()
         }
+    }
+    
+    /// Create a new text widget
+    pub fn new_text<T: Into<String>>(message: T, indent: usize) -> Self {
+        Self::new(message, indent, WidgetType::Text)
     }
 
     /// Create a new progress widget
-    pub fn new_progress<T: Into<String>>(message: T) -> Self {
-        Self {
-            message: message.into(),
-            widget: WidgetType::Percentage { progress: 0.0 },
-            ..default()
-        }
+    pub fn new_progress<T: Into<String>>(message: T, indent: usize, total: usize) -> Self {
+        Self::new(message, indent, WidgetType::Progress { progress: 0, total})
     }
 
     /// Create a new discrete progress widget
-    pub fn new_discrete_progress<T: Into<String>>(message: T, total: usize) -> Self {
-        Self {
-            message: message.into(),
-            widget: WidgetType::Progress { progress: 0, total },
-            ..default()
-        }
+    pub fn new_percentage<T: Into<String>>(message: T, indent: usize) -> Self {
+        Self::new(message, indent, WidgetType::Percentage { progress: 0.0 })
     }
 
     /// Create a new task widget
-    pub fn new_task<T: Into<String>>(message: T) -> Self {
-        Self {
-            message: message.into(),
-            widget: WidgetType::Task { done: false },
-            ..default()
-        }
+    pub fn new_task<T: Into<String>>(message: T, indent: usize) -> Self {
+        Self::new(message, indent, WidgetType::Task { done: false })
     }
 
     /// Create a new error widget
-    pub fn new_error<T: Into<String>>(message: T) -> Self {
-        Self {
-            message: message.into(),
-            widget: WidgetType::Error,
-            ..default()
-        }
+    pub fn new_error<T: Into<String>>(message: T, indent: usize) -> Self {
+        Self::new(message, indent, WidgetType::Error)
     }
 
     /// Update the progress of a progress widget
@@ -115,19 +105,6 @@ impl Widget {
             self.active = true;
             *d = done;
         }
-    }
-
-    /// adds a child to this widget tree
-    pub fn add_child(mut self, widget: Widget) -> Self {
-        self.children.push(Arc::new(Mutex::new(widget)));
-        self
-    }
-
-    /// adds children to this widget tree
-    pub fn add_children(mut self, children: impl Iterator<Item = Widget>) -> Self {
-        self.children
-            .extend(children.map(|w| Arc::new(Mutex::new(w))));
-        self
     }
 
     /// detects if this widget is done
