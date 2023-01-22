@@ -1,15 +1,16 @@
 use std::io::stdout;
-use std::sync::{Arc, Mutex};
-use std::time;
+use std::sync::Mutex;
+use std::time::{self, Duration};
 
-use crossterm::cursor::{MoveUp, RestorePosition, SavePosition};
+use crossterm::cursor::MoveUp;
+use crossterm::queue;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
-use crossterm::{execute, queue};
 use futures::Future;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::{Builder, Handle, Runtime};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::time::Interval;
 
 use crate::update::{self, Update, WidgetUpdate};
 use crate::widget::Widget;
@@ -18,6 +19,7 @@ pub struct App {
     pub widgets: Vec<Widget>,
     pub reciever: Receiver<update::WidgetUpdate>,
     pub sender: Sender<update::WidgetUpdate>,
+    pub runtime: Runtime,
 }
 
 #[derive(Clone)]
@@ -39,14 +41,23 @@ impl UpdateSender {
     }
 }
 
+impl Default for App {
+    fn default() -> Self {
+        let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
+
+        Self::new(runtime)
+    }
+}
+
 impl App {
-    pub fn new() -> Self {
+    pub fn new(runtime: Runtime) -> Self {
         let (sender, reciever) = mpsc::channel(64);
 
         Self {
             widgets: vec![],
             reciever,
             sender,
+            runtime,
         }
     }
 
@@ -58,7 +69,7 @@ impl App {
         T: Send + 'static,
     {
         let sender = UpdateSender::new(self.sender.clone(), index);
-        Handle::current().spawn(async move {
+        self.runtime.spawn(async move {
             // set active to true so i get the cool spinner thingy
             sender.send(Update::SetActive).await;
             // run the actual task & pass it into output
@@ -108,6 +119,8 @@ impl App {
     fn render_widgets(&self) {
         let time = time::SystemTime::now();
 
+        queue!(stdout(), MoveUp(self.widgets.len() as u16),).expect("no io err");
+
         for widget in &self.widgets {
             // put the backing behind it
             if widget.indent > 0 {
@@ -121,7 +134,6 @@ impl App {
 
             widget.render(time);
         }
-        queue!(stdout(), MoveUp(self.widgets.len() as u16),).expect("no io err");
     }
 
     fn update_widget_status(&mut self, mut index: usize) -> RenderInner {
@@ -203,3 +215,18 @@ struct RenderInner {
     all_done: bool,
     active: bool,
 }
+
+pub fn run_render(app: Mutex<App>) {
+    let mut app = app.lock().unwrap();
+    print!("{}", "\n".repeat(app.widgets.len() + 1));
+
+    let runtime = &app.runtime as *const Runtime as *mut Runtime;
+
+    unsafe { runtime.as_mut().unwrap() }.block_on(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs_f32(0.1));
+
+        while !app.render() {
+            interval.tick().await;
+        }
+    });
+    }

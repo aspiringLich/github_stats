@@ -2,7 +2,6 @@ use crossterm::style::Stylize;
 
 use std::{
     default::default,
-    sync::{Arc, Mutex},
     time,
 };
 
