@@ -5,7 +5,7 @@ use std::{
     time,
 };
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum WidgetType {
     // {message}
     #[default]
@@ -27,7 +27,7 @@ pub enum WidgetType {
     Error,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Widget {
     pub widget: WidgetType,
     pub active: bool,

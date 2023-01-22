@@ -1,5 +1,4 @@
 use std::io::stdout;
-use std::sync::Mutex;
 use std::time::{self, Duration};
 
 use crossterm::cursor::MoveUp;
@@ -7,14 +6,14 @@ use crossterm::queue;
 use crossterm::style::Print;
 use crossterm::terminal::{Clear, ClearType};
 use futures::Future;
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::{Builder, Runtime};
 
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::time::Interval;
 
 use crate::update::{self, Update, WidgetUpdate};
 use crate::widget::Widget;
 
+#[derive(Debug)]
 pub struct App {
     pub widgets: Vec<Widget>,
     pub reciever: Receiver<update::WidgetUpdate>,
@@ -62,19 +61,17 @@ impl App {
     }
 
     /// adds a new task to the runtime
-    pub fn add_task<E, F, T>(&mut self, f: E, index: usize, out: Mutex<T>)
+    pub fn add_task<E, F>(&mut self, f: E, index: usize)
     where
         E: FnOnce(UpdateSender) -> F + Send + 'static,
-        F: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         let sender = UpdateSender::new(self.sender.clone(), index);
         self.runtime.spawn(async move {
             // set active to true so i get the cool spinner thingy
             sender.send(Update::SetActive).await;
             // run the actual task & pass it into output
-            let ret = f(sender.clone()).await;
-            *out.lock().unwrap() = ret;
+            f(sender.clone()).await;
             // set done
             sender.send(Update::SetDone).await;
         });
@@ -86,6 +83,15 @@ impl App {
     pub fn add_widget(&mut self, widget: Widget) -> usize {
         self.widgets.push(widget);
         return self.widgets.len() - 1;
+    }
+
+    /// adds widgets to the app
+    ///
+    /// returns the index of the first widget you added
+    pub fn add_widgets(&mut self, widgets: impl IntoIterator<Item = Widget>) -> usize {
+        let out = self.widgets.len();
+        self.widgets.extend(widgets);
+        out
     }
 
     /// does a recursive depth first search through the widget tree
@@ -134,6 +140,10 @@ impl App {
 
             widget.render(time);
         }
+    }
+
+    pub fn update_widgets(&mut self) {
+        self.update_widget_status(0);
     }
 
     fn update_widget_status(&mut self, mut index: usize) -> RenderInner {
@@ -207,6 +217,21 @@ impl App {
         }
         return ret!();
     }
+
+    /// runs the render function 10 times a second until everything is done
+    pub fn run_until_done(&mut self) {
+        print!("{}", "\n".repeat(self.widgets.len() + 1));
+
+        let runtime = &self.runtime as *const Runtime as *mut Runtime;
+
+        unsafe { runtime.as_mut().unwrap() }.block_on(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs_f32(0.1));
+
+            while !self.render() {
+                interval.tick().await;
+            }
+        });
+    }
 }
 
 #[derive(Debug)]
@@ -215,18 +240,3 @@ struct RenderInner {
     all_done: bool,
     active: bool,
 }
-
-pub fn run_render(app: Mutex<App>) {
-    let mut app = app.lock().unwrap();
-    print!("{}", "\n".repeat(app.widgets.len() + 1));
-
-    let runtime = &app.runtime as *const Runtime as *mut Runtime;
-
-    unsafe { runtime.as_mut().unwrap() }.block_on(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs_f32(0.1));
-
-        while !app.render() {
-            interval.tick().await;
-        }
-    });
-    }

@@ -7,3 +7,4 @@
 pub mod app;
 pub mod update;
 pub mod widget;
+pub mod macros;
