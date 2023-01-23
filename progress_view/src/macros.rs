@@ -1,4 +1,4 @@
-pub macro make_tasks {
+pub macro _make_tasks {
     // empty: we've reached the end
     ($app:ident;) => {
 
@@ -7,32 +7,41 @@ pub macro make_tasks {
     ($app:ident; $indent:expr, $type:ident($($inner:tt)*); $($tail:tt)*) => {
         $app.add_widget(_make_widget!($indent, $type($($inner)*)));
 
-        make_tasks!($app; $($tail)*)
+        _make_tasks!($app; $($tail)*)
     },
     // app; task("Lorem ipsum") -> |sender| { .. };
-    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) -> |$sender:ident| $task:block; $($tail:tt)*) => {
+    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) |$sender:ident| $task:block; $($tail:tt)*) => {
         #[allow(unused_mut)]
         let mut cls = async move |$sender: crate::app::UpdateSender| $task;
         let idx = $app.add_widget(_make_widget!($indent, $type($($inner)*)));
         $app.add_task(cls, idx);
 
-        make_tasks!($app; $($tail)*)
+        _make_tasks!($app; $($tail)*)
     },
     // app; task("Lorem ipsum") -> |sender| ..;
-    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) -> |$sender:ident| $fn:stmt; $($tail:tt)*) => {
+    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) |$sender:ident| $fn:stmt; $($tail:tt)*) => {
         #[allow(unused_mut)]
         let mut cls = async move |$sender| { $fn };
         let idx = $app.add_widget(_make_widget!($indent, $type($($inner)*)));
         $app.add_task(cls, idx);
 
-        make_tasks!($app; $($tail)*)
+        _make_tasks!($app; $($tail)*)
+    },
+    // app; task("Lorem ipsum") -> |sender| .. { children };
+    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) |$sender:ident| $fn:stmt; $($tail:tt)*) => {
+        #[allow(unused_mut)]
+        let mut cls = async move |$sender| { $fn };
+        let idx = $app.add_widget(_make_widget!($indent, $type($($inner)*)));
+        $app.add_task(cls, idx);
+
+        _make_tasks!($app; $($tail)*)
     },
     // app; task("Lorem ipsum") -> fn_name;
-    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) -> $fn_name:ident; $($tail:tt)*) => {
+    ($app:ident; $indent:expr, $type:ident($($inner:tt)*) $fn_name:ident; $($tail:tt)*) => {
         let idx = $app.add_widget(_make_widget!($indent, $type($($inner)*)));
         $app.add_task($fn_name, idx);
 
-        make_tasks!($app; $($tail)*)
+        _make_tasks!($app; $($tail)*)
     },
 }
 
@@ -96,12 +105,12 @@ mod tests {
 
         let mut v = "change".to_string();
 
-        make_tasks!(
+        _make_tasks!(
             app_mac;
             0, task("root");
-            1, task("sub 1") -> |s| yeet(s).await;
-            1, task("sub 1") -> yeet;
-            2, task("sub 2") -> |s| {
+            1, task("sub 1") |s| yeet(s).await;
+            1, task("sub 1") yeet;
+            2, task("sub 2") |s| {
                 v.push_str("d");
                 yeet_msg(s, v).await;
             };
